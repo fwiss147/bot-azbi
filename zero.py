@@ -1,12 +1,10 @@
-python zero.py"""Small Discord music bot with Custom Emoji Interface Panel, YouTube & Spotify support."""
-
+import os
 import asyncio
 import base64
 import ctypes.util
 import html
 import json
 import logging
-import os
 import random
 import re
 import shutil
@@ -16,10 +14,22 @@ import urllib.request
 from collections import deque
 from dataclasses import dataclass, field
 from itertools import islice
-from pathlib import Path
+
+import discord
+import yt_dlp
+from discord import app_commands
+from dotenv import load_dotenv
+load_dotenv()
+
+from spotipy.oauth2 import SpotifyClientCredentials
+import spotipy
+
 from flask import Flask
 from threading import Thread
 
+log = logging.getLogger("zero")
+
+# إعداد خفيف بـ Flask باش يبقى السيرفر شغال 24/7 في Render كـ Web Service مجاني
 app = Flask('')
 
 @app.route('/')
@@ -32,19 +42,6 @@ def run():
 def keep_alive():
     t = Thread(target=run)
     t.start()
-
-# عيط ليها هنا قبل ما يخدم البوت
-keep_alive()
-import discord
-import yt_dlp
-from discord import app_commands
-from dotenv import load_dotenv
-load_dotenv()
-
-from spotipy.oauth2 import SpotifyClientCredentials
-import spotipy
-
-log = logging.getLogger("zero")
 
 
 def _env_int(name: str, default: int) -> int:
@@ -77,7 +74,6 @@ SPOTIFY_URL_RE = re.compile(
     r"https?://open\.spotify\.com/(?:intl-[a-zA-Z-]+/)?(track|album|playlist)/([a-zA-Z0-9]+)"
 )
 
-# Initialiser Spotify Client (kay-akhod les cles mn .env)
 sp_client_id = os.getenv("SPOTIPY_CLIENT_ID")
 spotify_client_secret = os.getenv("SPOTIPY_CLIENT_SECRET")
 
@@ -89,7 +85,6 @@ if spotify_enabled:
     ))
 
 async def resolve_spotify_query(query: str) -> str:
-    """Ila kan l-link d spotify, kan-st3mlo API bach njibo smia o artist b dbt"""
     if spotify_enabled and ("spotify.com" in query):
         try:
             if "track/" in query:
@@ -97,7 +92,6 @@ async def resolve_spotify_query(query: str) -> str:
                 track = sp.track(track_id)
                 name = track['name']
                 artists = ", ".join([artist['name'] for artist in track['artists']])
-                # Zidna "official audio" bach YouTube y-jib l-original track b dbt w may-ghltch[cite: 8]
                 return f"ytsearch:{name} {artists} official audio"
             elif "playlist/" in query:
                 playlist_id = query.split("playlist/")[1].split("?")[0]
@@ -585,7 +579,7 @@ class MusicInterfaceView(discord.ui.View):
         super().__init__(timeout=None)
 
     @discord.ui.button(
-        emoji=discord.PartialEmoji(name="shuffle", id=1566137079216210040 ),
+        emoji=discord.PartialEmoji(name="shuffle", id=1566137079216210040),
         style=discord.ButtonStyle.secondary, custom_id="zm:shuffle", row=0
     )
     async def btn_shuffle(self, interaction: discord.Interaction, _: discord.ui.Button):
@@ -606,7 +600,7 @@ class MusicInterfaceView(discord.ui.View):
         await interaction.followup.send("🔀 Queue shuffled!", ephemeral=True)
 
     @discord.ui.button(
-        emoji=discord.PartialEmoji(name="skip", id=1566137195658616993 ),
+        emoji=discord.PartialEmoji(name="skip", id=1566137195658616993),
         style=discord.ButtonStyle.secondary, custom_id="zm:skip", row=0
     )
     async def btn_skip(self, interaction: discord.Interaction, _: discord.ui.Button):
@@ -626,7 +620,7 @@ class MusicInterfaceView(discord.ui.View):
         )
 
     @discord.ui.button(
-        emoji=discord.PartialEmoji(name="pause", id=1566137264235483316 ),
+        emoji=discord.PartialEmoji(name="pause", id=1566137264235483316),
         style=discord.ButtonStyle.secondary, custom_id="zm:pause_resume", row=0
     )
     async def btn_pause_resume(self, interaction: discord.Interaction, _: discord.ui.Button):
@@ -648,7 +642,7 @@ class MusicInterfaceView(discord.ui.View):
         await interaction.followup.send(msg, ephemeral=True)
 
     @discord.ui.button(
-        emoji=discord.PartialEmoji(name="stop", id=1566137264235483316 ),
+        emoji=discord.PartialEmoji(name="stop", id=1566137264235483316),
         style=discord.ButtonStyle.secondary, custom_id="zm:stop", row=0
     )
     async def btn_stop(self, interaction: discord.Interaction, _: discord.ui.Button):
@@ -671,7 +665,7 @@ class MusicInterfaceView(discord.ui.View):
         )
 
     @discord.ui.button(
-        emoji=discord.PartialEmoji(name="volup", id=1566137139203276900 ),
+        emoji=discord.PartialEmoji(name="volup", id=1566137139203276900),
         style=discord.ButtonStyle.secondary, custom_id="zm:vol_up", row=1
     )
     async def btn_vol_up(self, interaction: discord.Interaction, _: discord.ui.Button):
@@ -687,7 +681,7 @@ class MusicInterfaceView(discord.ui.View):
         )
 
     @discord.ui.button(
-        emoji=discord.PartialEmoji(name="add", id=1566137282287763566 ),
+        emoji=discord.PartialEmoji(name="add", id=1566137282287763566),
         style=discord.ButtonStyle.secondary, custom_id="zm:add_song", row=1
     )
     async def btn_add_song(self, interaction: discord.Interaction, _: discord.ui.Button):
@@ -931,7 +925,6 @@ async def play(interaction: discord.Interaction, query: str):
         return
     await interaction.response.defer()
     
-    # Hada howa l-command li kay-resolve link d spotify b dbt b API
     query = await resolve_spotify_query(query)
 
     vc = interaction.guild.voice_client
@@ -1433,6 +1426,10 @@ def main() -> None:
     if shutil.which("ffmpeg") is None:
         raise SystemExit("ffmpeg is not installed or not on PATH.")
     _load_opus()
+    
+    # تشغيل نظام البقاء نشطاً لـ Flask
+    keep_alive()
+    
     bot.run(TOKEN, log_handler=None)
 
 
